@@ -6,6 +6,8 @@
 //  described in the README                               //
 //========================================================//
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include "predictor.h"
 
 //
@@ -36,7 +38,27 @@ int verbose;
 //
 //TODO: Add your own Branch Predictor data structures here
 //
+// Parameters
 
+int mask_perceptron = 0;
+
+// Perceptron Data
+int **weights;
+int *history;
+float y;
+
+// Utility
+int power(int base, int exp) {
+  return exp == 0 ? 1 : base * power(base, exp - 1);
+}
+
+int transferHistory() {
+  int ghr = 0;
+  for (int i = 0; i < ghistoryBits; i++) {
+    ghr = (ghr << 1) | (history[i] == 1 ? 1 : 0);
+  }
+  return ghr;
+}
 
 //------------------------------------//
 //        Predictor Functions         //
@@ -50,6 +72,22 @@ init_predictor()
   //
   //TODO: Initialize Branch Predictor Data Structures
   //
+  switch (bpType) {
+    case STATIC:
+      break;
+    case GSHARE:
+      // Initialize the global history register
+      break;
+    case TOURNAMENT:
+      // Initialize the local history register
+      break;
+    case CUSTOM:
+      // Initialize custom predictor data structures
+      init_custom_predictor();
+      break;
+    default:
+      break;
+  }
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -70,6 +108,8 @@ make_prediction(uint32_t pc)
     case GSHARE:
     case TOURNAMENT:
     case CUSTOM:
+      // Call the custom prediction function for perceptron-based predictors
+      return make_custom_prediction(pc);
     default:
       break;
   }
@@ -88,4 +128,69 @@ train_predictor(uint32_t pc, uint8_t outcome)
   //
   //TODO: Implement Predictor training
   //
+  switch (bpType) {
+    case STATIC:
+        break;
+    case GSHARE:
+        break;
+    case TOURNAMENT:
+        break;
+    case CUSTOM:
+        // Call the custom training function for perceptron-based predictors
+        train_custom_predictor(pc, outcome);
+        break;
+    default:
+        break;
+  }
+}
+
+// Custom predictor initialization
+void init_custom_predictor()
+{
+  // Initialize perceptron parameters
+  ghistoryBits = 12;
+  pcIndexBits = 10;
+  for (int i = 0; i < pcIndexBits; i++) mask_perceptron = (mask_perceptron << 1) | 1;
+  int size = power(2, pcIndexBits);
+  weights = (int **)malloc(size * sizeof(int *));
+  for (int i = 0; i < size; i++) {
+    weights[i] = (int *)calloc(ghistoryBits + 1, sizeof(int));
+  }
+
+  history = (int *)malloc(ghistoryBits * sizeof(int));
+  for (int i = 0; i < ghistoryBits; i++) history[i] = -1;
+}
+
+// Make a custom prediction for conditional branch instruction at PC 'pc'
+uint8_t make_custom_prediction(uint32_t pc)
+{
+  int ghr = transferHistory();
+  int index = (pc & mask_perceptron) ^ (ghr & mask_perceptron);
+  y = weights[index][ghistoryBits]; // bias
+  for (int i = 0; i < ghistoryBits; i++) {
+    y += weights[index][i] * history[i];
+  }
+  return y >= 0 ? TAKEN : NOTTAKEN;
+}
+
+
+void train_custom_predictor(uint32_t pc, uint8_t outcome)
+{
+  int result = outcome == TAKEN ? 1 : -1;
+  int ghr = transferHistory();
+  int index = (pc & mask_perceptron) ^ (ghr & mask_perceptron);
+  int prediction = y >= 0 ? TAKEN : NOTTAKEN;
+
+  int threshold = 1.93 * ghistoryBits + 14;
+  if (prediction != outcome || (y > -threshold && y < threshold)) {
+    weights[index][ghistoryBits] += result; // bias
+    for (int i = 0; i < ghistoryBits; i++) {
+      weights[index][i] += result * history[i];
+    }
+  }
+
+  for (int i = ghistoryBits - 1; i > 0; i--) {
+    history[i] = history[i - 1];
+  }
+  history[0] = result;
 }
