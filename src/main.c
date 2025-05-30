@@ -133,6 +133,7 @@ main(int argc, char *argv[])
   float mispredict_rate = 100*((float)mispredictions / (float)num_branches);
   printf("Misprediction Rate: %7.3f%% \n", mispredict_rate);
 
+
   // Cleanup
   fclose(stream);
   free(buf);
