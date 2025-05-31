@@ -58,10 +58,8 @@ extern int verbose;
 // Initialize the predictor
 //
 void init_predictor();
-
 void init_predictor_TOURNAMENT();
-
-
+void gshare_init_predictor();
 void init_custom_predictor();
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -69,9 +67,8 @@ void init_custom_predictor();
 // indicates a prediction of not taken
 //
 uint8_t make_prediction(uint32_t pc);
-
 uint8_t make_prediction_TOURNAMENT(uint32_t pc);
-
+uint8_t gshare_make_prediction(uint32_t pc);
 uint8_t make_custom_prediction(uint32_t pc);
 
 
@@ -80,9 +77,8 @@ uint8_t make_custom_prediction(uint32_t pc);
 // indicates that the branch was not taken)
 //
 void train_predictor(uint32_t pc, uint8_t outcome);
-
 void train_predictor_TOURNAMENT(uint32_t pc, uint8_t outcome);
-
+void gshare_train_predictor(uint32_t pc, uint8_t outcome);
 void train_custom_predictor(uint32_t pc, uint8_t outcome);
 
 
