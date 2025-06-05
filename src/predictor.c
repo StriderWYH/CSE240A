@@ -103,6 +103,94 @@ init_predictor()
   }
 }
 
+// Make a prediction for conditional branch instruction at PC 'pc'
+// Returning TAKEN indicates a prediction of taken; returning NOTTAKEN
+// indicates a prediction of not taken
+//
+uint8_t
+make_prediction(uint32_t pc)
+{
+  //
+  //TODO: Implement prediction scheme
+  //
+
+  // Make a prediction based on the bpType
+  switch (bpType) {
+    case STATIC:
+      return TAKEN;
+    case GSHARE:
+      return gshare_make_prediction(pc);
+      break;
+    case TOURNAMENT:
+      return make_prediction_TOURNAMENT(pc);
+    case CUSTOM:
+      // Call the custom prediction function for perceptron-based predictors
+      return make_custom_prediction(pc);
+    default:
+      break;
+  }
+
+  // If there is not a compatable bpType then return NOTTAKEN
+  return NOTTAKEN;
+}
+
+// Train the predictor the last executed branch at PC 'pc' and with
+// outcome 'outcome' (true indicates that the branch was taken, false
+// indicates that the branch was not taken)
+//
+void
+train_predictor(uint32_t pc, uint8_t outcome)
+{
+  //
+  //TODO: Implement Predictor training
+  //
+  switch (bpType) {
+    case STATIC:
+        break;
+    case GSHARE:
+        gshare_train_predictor(pc, outcome);
+        break;
+    case TOURNAMENT:
+        train_predictor_TOURNAMENT(pc, outcome);
+        break;
+    case CUSTOM:
+        // Call the custom training function for perceptron-based predictors
+        train_custom_predictor(pc, outcome);
+        break;
+    default:
+        break;
+  }
+
+}
+
+
+// Make a prediction for the Tournament predictor
+// This function will use the global history and local history
+// to make a prediction
+uint8_t
+make_prediction_TOURNAMENT(uint32_t pc)
+{
+  uint32_t mask_pc = (1 << pcIndexBits) - 1;
+  uint32_t mask_PHT = (1 << lhistoryBits) - 1;
+
+  // 1. obtain the history register
+  uint32_t index_PHT = pc & mask_pc;            
+  uint32_t value_PHT = PHT[index_PHT] & mask_PHT;
+  uint8_t prediction_local = BHT_local[value_PHT]; 
+  uint8_t prediction_global = BHT_global[GHR];
+
+  // 2. get the chooser
+  uint8_t choose = chooser[GHR];
+
+  // Use the global history register if choose is > 1
+  if (choose <= 1) {
+      return prediction_local <= 1 ? NOTTAKEN : TAKEN;
+  } else {
+      return prediction_global <= 1 ? NOTTAKEN : TAKEN;
+  }
+
+}
+
 // Initialize the Tournament predictor
 // This function will initialize the local history register
 // and the global history register
@@ -134,93 +222,6 @@ void  init_predictor_TOURNAMENT()
   for (int i = 0; i < (1 << ghistoryBits); i++) {
     chooser[i] = WG;
   }
-}
- 
-
-// Make a prediction for conditional branch instruction at PC 'pc'
-// Returning TAKEN indicates a prediction of taken; returning NOTTAKEN
-// indicates a prediction of not taken
-//
-uint8_t
-make_prediction(uint32_t pc)
-{
-  //
-  //TODO: Implement prediction scheme
-  //
-
-  // Make a prediction based on the bpType
-  switch (bpType) {
-    case STATIC:
-      return TAKEN;
-    case GSHARE:
-      return gshare_make_prediction(pc);
-    case TOURNAMENT:
-      return make_prediction_TOURNAMENT(pc);
-    case CUSTOM:
-      // Call the custom prediction function for perceptron-based predictors
-      return make_custom_prediction(pc);
-    default:
-      break;
-  }
-
-  // If there is not a compatable bpType then return NOTTAKEN
-  return NOTTAKEN;
-}
-
-// Make a prediction for the Tournament predictor
-// This function will use the global history and local history
-// to make a prediction
-uint8_t
-make_prediction_TOURNAMENT(uint32_t pc)
-{
-  uint32_t mask_pc = (1 << pcIndexBits) - 1;
-  uint32_t mask_PHT = (1 << lhistoryBits) - 1;
-
-  // 1. obtain the history register
-  uint32_t index_PHT = pc & mask_pc;            
-  uint32_t value_PHT = PHT[index_PHT] & mask_PHT;
-  uint8_t prediction_local = BHT_local[value_PHT]; 
-  uint8_t prediction_global = BHT_global[GHR];
-
-  // 2. get the chooser
-  uint8_t choose = chooser[GHR];
-
-  // Use the global history register if choose is > 1
-  if (choose <= 1) {
-      return prediction_local <= 1 ? NOTTAKEN : TAKEN;
-  } else {
-      return prediction_global <= 1 ? NOTTAKEN : TAKEN;
-  }
-
-}
-
-// Train the predictor the last executed branch at PC 'pc' and with
-// outcome 'outcome' (true indicates that the branch was taken, false
-// indicates that the branch was not taken)
-//
-void
-train_predictor(uint32_t pc, uint8_t outcome)
-{
-  //
-  //TODO: Implement Predictor training
-  //
-  switch (bpType) {
-    case STATIC:
-        break;
-    case GSHARE:
-        gshare_train_predictor(pc, outcome);
-        break;
-    case TOURNAMENT:
-        train_predictor_TOURNAMENT(pc, outcome);
-        break;
-    case CUSTOM:
-        // Call the custom training function for perceptron-based predictors
-        train_custom_predictor(pc, outcome);
-        break;
-    default:
-        break;
-  }
-
 }
 
 // Custom predictor initialization
@@ -334,7 +335,7 @@ void gshare_init_predictor(){
   uint32_t numBHTEntries = 1 << ghistoryBits; // power(2, ghistoryBits)
 
   gshareGlobalHistoryRegister = 0;
-  gshareBHT = (uint8_t *)malloc(numBHTEntries * sizeof(uint8_t));
+  gshareBHT = malloc(numBHTEntries * sizeof(uint8_t));
   memset(gshareBHT, WN, numBHTEntries * sizeof(uint8_t));
   gshareMask = numBHTEntries - 1; // a mask with 00...11..., the lower ghistoryBits bits is 1
 }
@@ -366,4 +367,6 @@ void gshare_train_predictor(uint32_t pc, uint8_t outcome){
       --gshareBHT[BHTindex];
     }
   }
+
+  gshareGlobalHistoryRegister = ((gshareGlobalHistoryRegister << 1) | outcome) & gshareMask;
 }
